@@ -72,6 +72,13 @@ import (
 	"github.com/earthly/earthly/variables"
 )
 
+const (
+	// DefaultBuildkitdContainerName is the name of the buildkitd container.
+	DefaultBuildkitdContainerName = "earthly-buildkitd"
+	// DefaultBuildkitdVolumeName is the name of the docker volume used for storing the cache.
+	DefaultBuildkitdVolumeName = "earthly-cache"
+)
+
 var dotEnvPath = ".env"
 
 type earthlyApp struct {
@@ -102,6 +109,8 @@ type cliFlags struct {
 	enableProfiler            bool
 	buildkitHost              string
 	buildkitdImage            string
+	containerName             string
+	volumeName                string
 	remoteCache               string
 	maxRemoteCache            bool
 	saveInlineCache           bool
@@ -417,7 +426,7 @@ func newEarthlyApp(ctx context.Context, console conslogging.ConsoleLogger) *eart
 		},
 		&cli.StringFlag{
 			Name:        "buildkit-host",
-			Value:       buildkitd.DockerAddress,
+			Value:       "",
 			EnvVars:     []string{"EARTHLY_BUILDKIT_HOST"},
 			Usage:       wrap("The URL to use for connecting to a buildkit host. ", "If empty, earthly will attempt to start a buildkitd instance via docker run"),
 			Destination: &app.buildkitHost,
@@ -458,6 +467,20 @@ func newEarthlyApp(ctx context.Context, console conslogging.ConsoleLogger) *eart
 			EnvVars:     []string{"EARTHLY_BUILDKIT_IMAGE"},
 			Usage:       "The docker image to use for the buildkit daemon",
 			Destination: &app.buildkitdImage,
+		},
+		&cli.StringFlag{
+			Name:        "buildkit-container-name",
+			Value:       DefaultBuildkitdContainerName,
+			EnvVars:     []string{"EARTHLY_CONTAINER_NAME"},
+			Usage:       "The docker container name to use for the buildkit daemon",
+			Destination: &app.containerName,
+		},
+		&cli.StringFlag{
+			Name:        "buildkit-volume-name",
+			Value:       DefaultBuildkitdVolumeName,
+			EnvVars:     []string{"EARTHLY_VOLUME_NAME"},
+			Usage:       "The docker volume name to use for the buildkit daemon cache",
+			Destination: &app.buildkitdSettings.VolumeName,
 		},
 		&cli.StringFlag{
 			Name:        "remote-cache",
@@ -944,6 +967,10 @@ func (app *earthlyApp) before(context *cli.Context) error {
 
 	if context.IsSet("config") {
 		app.console.Printf("loading config values from %q\n", app.configPath)
+	}
+
+	if app.buildkitHost == "" {
+		app.buildkitHost = fmt.Sprintf("docker-container://%s", app.containerName)
 	}
 
 	var yamlData []byte
@@ -1448,7 +1475,7 @@ func (app *earthlyApp) run(ctx context.Context, args []string) int {
 				app.console.Warnf(
 					"It seems that buildkitd is shutting down or it has crashed. " +
 						"You can report crashes at https://github.com/earthly/earthly/issues/new.")
-				buildkitd.PrintLogs(ctx, app.buildkitdSettings, app.console)
+				buildkitd.PrintLogs(ctx, app.containerName, app.buildkitdSettings, app.console)
 				return 7
 			}
 		} else if errors.Is(err, buildkitd.ErrBuildkitCrashed) {
@@ -1456,14 +1483,14 @@ func (app *earthlyApp) run(ctx context.Context, args []string) int {
 			app.console.Warnf(
 				"It seems that buildkitd is shutting down or it has crashed. " +
 					"You can report crashes at https://github.com/earthly/earthly/issues/new.")
-			buildkitd.PrintLogs(ctx, app.buildkitdSettings, app.console)
+			buildkitd.PrintLogs(ctx, app.containerName, app.buildkitdSettings, app.console)
 			return 7
 		} else if errors.Is(err, buildkitd.ErrBuildkitStartFailure) {
 			app.console.Warnf("Error: %v\n", err)
 			app.console.Warnf(
 				"It seems that buildkitd had an issue. " +
 					"You can report crashes at https://github.com/earthly/earthly/issues/new.")
-			buildkitd.PrintLogs(ctx, app.buildkitdSettings, app.console)
+			buildkitd.PrintLogs(ctx, app.containerName, app.buildkitdSettings, app.console)
 			return 6
 		} else if isInterpereterError {
 			app.console.Warnf("Error: %s\n", ie.Error())
@@ -1606,7 +1633,7 @@ func (app *earthlyApp) bootstrap(c *cli.Context) error {
 		}
 
 		// Bootstrap buildkit - pulls image and starts daemon.
-		bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
+		bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.containerName, app.buildkitdSettings)
 		if err != nil {
 			return errors.Wrap(err, "bootstrap new buildkitd client")
 		}
@@ -2334,7 +2361,7 @@ func (app *earthlyApp) actionPrune(c *cli.Context) error {
 		return errors.New("invalid arguments")
 	}
 	if app.pruneReset {
-		err := buildkitd.ResetCache(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
+		err := buildkitd.ResetCache(c.Context, app.console, app.buildkitdImage, app.containerName, app.buildkitdSettings)
 		if err != nil {
 			return errors.Wrap(err, "reset cache")
 		}
@@ -2342,7 +2369,7 @@ func (app *earthlyApp) actionPrune(c *cli.Context) error {
 	}
 
 	// Prune via API.
-	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
+	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.containerName, app.buildkitdSettings)
 	if err != nil {
 		return errors.Wrap(err, "prune new buildkitd client")
 	}
@@ -2541,14 +2568,14 @@ func (app *earthlyApp) actionBuildImp(c *cli.Context, flagArgs, nonFlagArgs []st
 			return errors.Wrapf(err, "parse target name %s", targetName)
 		}
 	}
-	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
+	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.containerName, app.buildkitdSettings)
 	if err != nil {
 		return errors.Wrap(err, "build new buildkitd client")
 	}
 	defer bkClient.Close()
 	isLocal := buildkitd.IsLocal(app.buildkitdSettings.BuildkitAddress)
 
-	bkIP, err := buildkitd.GetContainerIP(c.Context, app.buildkitdSettings)
+	bkIP, err := buildkitd.GetContainerIP(c.Context, app.containerName, app.buildkitdSettings)
 	if err != nil {
 		return errors.Wrap(err, "get buildkit container IP")
 	}
