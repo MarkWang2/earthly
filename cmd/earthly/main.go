@@ -101,6 +101,7 @@ type cliFlags struct {
 	allowPrivileged           bool
 	enableProfiler            bool
 	buildkitHost              string
+	targetAtsJson             string
 	buildkitdImage            string
 	remoteCache               string
 	maxRemoteCache            bool
@@ -421,6 +422,13 @@ func newEarthlyApp(ctx context.Context, console conslogging.ConsoleLogger) *eart
 			EnvVars:     []string{"EARTHLY_BUILDKIT_HOST"},
 			Usage:       wrap("The URL to use for connecting to a buildkit host. ", "If empty, earthly will attempt to start a buildkitd instance via docker run"),
 			Destination: &app.buildkitHost,
+		},
+		&cli.StringFlag{
+			Name:        "target-ats-json",
+			Value:       "{}",
+			EnvVars:     []string{"TARGET_ATS_JSON"},
+			Usage:       wrap("targetAtsJson"),
+			Destination: &app.targetAtsJson,
 		},
 		&cli.StringFlag{
 			Name:        "debugger-host",
@@ -2537,10 +2545,16 @@ func (app *earthlyApp) actionBuildImp(c *cli.Context, flagArgs, nonFlagArgs []st
 		targetName := nonFlagArgs[0]
 		var err error
 		target, err = domain.ParseTarget(targetName)
+		//if len(app.targetAtsJson) > 0 {
+		//	target.FromArgs = true
+		//}
 		if err != nil {
 			return errors.Wrapf(err, "parse target name %s", targetName)
 		}
 	}
+	var err error
+	err = ioutil.WriteFile("output.json", []byte(app.targetAtsJson), 0644) // app.targetAtsJson
+
 	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
 	if err != nil {
 		return errors.Wrap(err, "build new buildkitd client")
