@@ -11,6 +11,7 @@ import (
 	"github.com/earthly/earthly/util/syncutil/synccache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/pkg/errors"
+	"path/filepath"
 )
 
 type localResolver struct {
@@ -49,14 +50,12 @@ func (lr *localResolver) resolveLocal(ctx context.Context, ref domain.Reference)
 	}
 	metadata := metadataValue.(*gitutil.GitMetadata)
 	var buildFilePath string
-	// todo: this has issue need more debug
-	//target := ref.(domain.Target)
-	//if !target.FromArgs {
-	//	buildFilePath, err = detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
-	//}
-	//if err != nil {
-	//	return nil, err
-	//}
+	if ref.GetName() != "clone" {
+		buildFilePath, err = detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	var buildContext pllb.State
 	if _, isTarget := ref.(domain.Target); isTarget {
