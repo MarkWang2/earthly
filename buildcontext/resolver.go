@@ -126,14 +126,18 @@ func (r *Resolver) parseTargetJsonfile(ctx context.Context, path string) (spec.E
 	var efValue interface{}
 	efValue, err = r.parseCache.Do(ctx, path, func(ctx context.Context, k interface{}) (interface{}, error) {
 		file, _ := filepath.Abs("output.json")
-		jsonFile, err := os.Open(file)
-		defer jsonFile.Close()
-		byteValue, _ := ioutil.ReadAll(jsonFile)
-		if err != nil {
-			fmt.Println(err)
+		if _, err := os.Stat(file); err == nil {
+			jsonFile, err := os.Open(file)
+			defer jsonFile.Close()
+			byteValue, _ := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				fmt.Println(err)
+			}
+			err = json.Unmarshal(byteValue, &efile)
+			return efile, err
+		} else {
+			return ast.Parse(ctx, k.(string), true)
 		}
-		err = json.Unmarshal(byteValue, &efile)
-		return efile, err
 	})
 	ef := efValue.(spec.Earthfile)
 

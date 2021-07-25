@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/pkg/errors"
 	"path/filepath"
-	"strings"
 )
 
 type localResolver struct {
@@ -51,12 +50,7 @@ func (lr *localResolver) resolveLocal(ctx context.Context, ref domain.Reference)
 	}
 	metadata := metadataValue.(*gitutil.GitMetadata)
 	var buildFilePath string
-	if strings.Contains(ref.GetName(), "@dockerfile:Dockerfile") {
-		buildFilePath, err = detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
-	}
-	if err != nil {
-		return nil, err
-	}
+	buildFilePath, err = detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
 
 	var buildContext pllb.State
 	if _, isTarget := ref.(domain.Target); isTarget {

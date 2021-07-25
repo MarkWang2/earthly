@@ -425,7 +425,7 @@ func newEarthlyApp(ctx context.Context, console conslogging.ConsoleLogger) *eart
 		},
 		&cli.StringFlag{
 			Name:        "target-ats-json",
-			Value:       "{}",
+			Value:       "",
 			EnvVars:     []string{"TARGET_ATS_JSON"},
 			Usage:       wrap("targetAtsJson"),
 			Destination: &app.targetAtsJson,
@@ -934,6 +934,7 @@ Set up a whole custom git repository for a server called example.com, using a si
 	}
 
 	app.cliApp.Before = app.before
+	//app.cliApp.After
 	return app
 }
 
@@ -2553,7 +2554,10 @@ func (app *earthlyApp) actionBuildImp(c *cli.Context, flagArgs, nonFlagArgs []st
 		}
 	}
 	var err error
-	err = ioutil.WriteFile("output.json", []byte(app.targetAtsJson), 0644) // app.targetAtsJson
+	os.Remove("output.json")
+	if len(app.targetAtsJson) > 0 {
+		err = ioutil.WriteFile("output.json", []byte(app.targetAtsJson), 0644) // app.targetAtsJson
+	}
 
 	bkClient, err := buildkitd.NewClient(c.Context, app.console, app.buildkitdImage, app.buildkitdSettings)
 	if err != nil {
