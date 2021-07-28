@@ -2,8 +2,6 @@ package buildcontext
 
 import (
 	"context"
-	"path/filepath"
-
 	"github.com/earthly/earthly/analytics"
 	"github.com/earthly/earthly/conslogging"
 	"github.com/earthly/earthly/domain"
@@ -13,6 +11,7 @@ import (
 	"github.com/earthly/earthly/util/syncutil/synccache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/pkg/errors"
+	"path/filepath"
 )
 
 type localResolver struct {
@@ -50,11 +49,8 @@ func (lr *localResolver) resolveLocal(ctx context.Context, ref domain.Reference)
 		return nil, err
 	}
 	metadata := metadataValue.(*gitutil.GitMetadata)
-
-	buildFilePath, err := detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
-	if err != nil {
-		return nil, err
-	}
+	var buildFilePath string
+	buildFilePath, err = detectBuildFile(ref, filepath.FromSlash(ref.GetLocalPath()))
 
 	var buildContext pllb.State
 	if _, isTarget := ref.(domain.Target); isTarget {

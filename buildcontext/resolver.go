@@ -2,6 +2,10 @@ package buildcontext
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -95,7 +99,8 @@ func (r *Resolver) Resolve(ctx context.Context, gwClient gwclient.Client, ref do
 	d.Ref = gitutil.ReferenceWithGitMeta(ref, d.GitMetadata)
 	d.LocalDirs = localDirs
 	if !strings.HasPrefix(ref.GetName(), DockerfileMetaTarget) {
-		d.Earthfile, err = r.parseEarthfile(ctx, d.BuildFilePath)
+		d.Earthfile, err = r.parseTargetJsonfile(ctx, d.BuildFilePath) // r.parseTargetJsonfile(ctx, string(byteValue[:]))
+
 		if err != nil {
 			return nil, err
 		}
@@ -113,4 +118,28 @@ func (r *Resolver) parseEarthfile(ctx context.Context, path string) (spec.Earthf
 	}
 	ef := efValue.(spec.Earthfile)
 	return ef, nil
+}
+
+func (r *Resolver) parseTargetJsonfile(ctx context.Context, path string) (spec.Earthfile, error) {
+	var efile spec.Earthfile
+	var err error
+	var efValue interface{}
+	efValue, err = r.parseCache.Do(ctx, path, func(ctx context.Context, k interface{}) (interface{}, error) {
+		file, _ := filepath.Abs("output.json")
+		if _, err := os.Stat(file); err == nil {
+			jsonFile, err := os.Open(file)
+			defer jsonFile.Close()
+			byteValue, _ := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				fmt.Println(err)
+			}
+			err = json.Unmarshal(byteValue, &efile)
+			return efile, err
+		} else {
+			return ast.Parse(ctx, k.(string), true)
+		}
+	})
+	ef := efValue.(spec.Earthfile)
+
+	return ef, err
 }
