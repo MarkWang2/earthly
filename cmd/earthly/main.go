@@ -2546,9 +2546,6 @@ func (app *earthlyApp) actionBuildImp(c *cli.Context, flagArgs, nonFlagArgs []st
 		targetName := nonFlagArgs[0]
 		var err error
 		target, err = domain.ParseTarget(targetName)
-		//if len(app.targetAtsJson) > 0 {
-		//	target.FromArgs = true
-		//}
 		if err != nil {
 			return errors.Wrapf(err, "parse target name %s", targetName)
 		}
